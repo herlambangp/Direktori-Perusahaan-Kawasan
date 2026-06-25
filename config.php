@@ -3,7 +3,7 @@
 // config.php — Konfigurasi terpusat
 // ============================================================
 // Saat upload ke hosting, HANYA file ini yang perlu diubah.
-// Jangan hapus file ini, jangan rename.
+// 10.0.11.161, lspwebbp_hp, lspwebbp_namadb, *Hp040391
 // ============================================================
 
 // --- Database ---
