@@ -1,5 +1,5 @@
 # Abaikan file konfigurasi database
-config.php
+# config.php
 
 # Abaikan folder/file bawaan OS jika ada
 .DS_Store
