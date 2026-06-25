@@ -1,0 +1,6 @@
+# Abaikan file konfigurasi database
+config.php
+
+# Abaikan folder/file bawaan OS jika ada
+.DS_Store
+Thumbs.db
