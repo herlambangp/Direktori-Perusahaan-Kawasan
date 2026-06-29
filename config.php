@@ -13,9 +13,15 @@ define('DB_PASS', '');              // ← Isi password DB hosting
 define('DB_NAME', 'db_kawasan');    // ← Sesuaikan nama DB di hosting
 
 // --- Auto-detect APP URL (root direktori ini di web) ---
-// Bekerja otomatis di localhost maupun hosting — tidak perlu diubah manual.
+// Jika di hosting mengalami "Invalid parameter: redirect_uri", HAPUS/COMMENT baris // di bawah
+// dan sesuaikan dengan URL publik aplikasi Anda secara persis (harus diakhiri garis miring).
+// define('APP_URL', 'https://domainbps.go.id/direktori-kawasan/'); 
+
 if (!defined('APP_URL')) {
-    $_proto   = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    // Deteksi HTTPS untuk reverse proxy (X-Forwarded-Proto)
+    $isHttps  = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || 
+                (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https');
+    $_proto   = $isHttps ? 'https' : 'http';
     $_host    = $_SERVER['HTTP_HOST'] ?? 'localhost';
     $_docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT'] ?? ''), '/');
     $_selfDir = rtrim(str_replace('\\', '/', __DIR__), '/');
