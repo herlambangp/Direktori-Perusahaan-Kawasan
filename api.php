@@ -1,10 +1,20 @@
 <?php
 // api.php
+session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
 
 require_once __DIR__ . '/config.php';
 $conn = db_connect();
+
+// Helper: cek apakah request ini dari admin yang sudah login
+function require_admin(): void {
+    if (empty($_SESSION['is_admin'])) {
+        http_response_code(401);
+        echo json_encode(['status' => 'error', 'message' => 'Akses ditolak. Silakan login sebagai admin terlebih dahulu.']);
+        exit;
+    }
+}
 
 $action = $_GET['action'] ?? $_POST['action'] ?? '';
 
@@ -20,9 +30,21 @@ if (!empty($inputJSON)) {
 }
 
 // =============================================================
+// ACTION: get_auth_status — kembalikan status sesi login
+// =============================================================
+if ($action === 'get_auth_status') {
+    echo json_encode([
+        'status'   => 'success',
+        'is_admin' => !empty($_SESSION['is_admin']),
+        'username' => $_SESSION['username'] ?? null,
+        'nama'     => $_SESSION['nama']     ?? null,
+    ]);
+    exit;
+
+// =============================================================
 // ACTION: get_summary
 // =============================================================
-if ($action === 'get_summary') {
+} elseif ($action === 'get_summary') {
     $resKEK = $conn->query("SELECT COUNT(DISTINCT nmkw) as kawasan_count, COUNT(*) as perusahaan_count FROM perusahaan WHERE jnskw = 'KEK'");
     $rowKEK = $resKEK->fetch_assoc();
 
@@ -89,7 +111,8 @@ if ($action === 'get_summary') {
     $jnskw = $_GET['jnskw'] ?? 'KEK';
 
     $stmt = $conn->prepare(
-        "SELECT id, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat
+        "SELECT id, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat,
+                idstpu, nmkorespondensi, nohp, email, jarusaha, kbli
          FROM perusahaan
          WHERE jnskw = ?
          ORDER BY nmprov, nmkab, nmkw, nmprsh"
@@ -104,10 +127,16 @@ if ($action === 'get_summary') {
     while ($row = $result->fetch_assoc()) {
         $nmkw    = ($row['nmkw'] && trim($row['nmkw']) !== '') ? $row['nmkw'] : 'Lainnya';
         $company = [
-            "id"    => (int)$row['id'],
-            "name"  => $row['nmprsh'],
-            "alamat"=> $row['alamat'] ?? '',
-            "type"  => "perusahaan"
+            "id"              => (int)$row['id'],
+            "name"            => $row['nmprsh'],
+            "alamat"          => $row['alamat']          ?? '',
+            "idstpu"          => $row['idstpu']          ?? '',
+            "nmkorespondensi" => $row['nmkorespondensi'] ?? '',
+            "nohp"            => $row['nohp']            ?? '',
+            "email"           => $row['email']           ?? '',
+            "jarusaha"        => $row['jarusaha']        ?? '',
+            "kbli"            => $row['kbli']            ?? '',
+            "type"            => "perusahaan"
         ];
 
         // ── Baris TANPA kdprovkab → node Lainnya tunggal ──────────────
@@ -212,6 +241,8 @@ if ($action === 'get_summary') {
 // ACTION: move_company
 // =============================================================
 } elseif ($action === 'move_company') {
+    require_admin();
+
     $company_id  = $input['company_id']  ?? null;
     $target_type = $input['target_type'] ?? null;
     $new_nmkw    = $input['new_nmkw']    ?? '';
@@ -278,6 +309,8 @@ if ($action === 'get_summary') {
 // ACTION: add_company
 // =============================================================
 } elseif ($action === 'add_company') {
+    require_admin();
+
     $jnskw  = $input['jnskw']  ?? '';
     $kdprov = $input['kdprov'] ?? '';
     $nmprov = $input['nmprov'] ?? '';
@@ -288,16 +321,30 @@ if ($action === 'get_summary') {
     $nmprsh = $input['nmprsh'] ?? '';
     $alamat = $input['alamat'] ?? '';
 
+    // Field baru
+    $idstpu          = $input['idstpu']          ?? '';
+    $nmkorespondensi = $input['nmkorespondensi'] ?? '';
+    $nohp            = $input['nohp']            ?? '';
+    $email           = $input['email']           ?? '';
+    $jarusaha        = $input['jarusaha']        ?? '';
+    $kbli            = $input['kbli']            ?? '';
+
     if (!$jnskw || !$kdprov || !$kdkab || !$nmkw || !$nmprsh) {
         echo json_encode(["status" => "error", "message" => "Data tidak lengkap"]);
         exit;
     }
 
     $stmt = $conn->prepare(
-        "INSERT INTO perusahaan (jnskw, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO perusahaan
+            (jnskw, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat,
+             idstpu, nmkorespondensi, nohp, email, jarusaha, kbli)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param("sssssssss", $jnskw, $kdprov, $nmprov, $kdkab, $nmkab, $kdprovkab, $nmkw, $nmprsh, $alamat);
+    $stmt->bind_param(
+        "sssssssssssssss",
+        $jnskw, $kdprov, $nmprov, $kdkab, $nmkab, $kdprovkab, $nmkw, $nmprsh, $alamat,
+        $idstpu, $nmkorespondensi, $nohp, $email, $jarusaha, $kbli
+    );
 
     echo $stmt->execute()
         ? json_encode(["status" => "success", "message" => "Data berhasil ditambahkan"])

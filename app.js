@@ -5,6 +5,7 @@
 let currentJnskw  = '';
 let directoryData = [];
 let mapPanelOpen  = true;
+let isAdmin       = false;   // diisi oleh checkAuthStatus()
 
 // ─── View Navigation ──────────────────────────────────────────────────────────
 
@@ -146,14 +147,66 @@ function createNodeElement(node) {
 
     el.appendChild(content);
 
-    // Company detail
+    // ── Company tooltip (muncul saat klik nama perusahaan) ───────────────────
     if (isCompany) {
-        const detail = document.createElement('div');
-        detail.className = 'company-address';
-        detail.innerHTML = `<i class="fas fa-map-marker-alt"></i> ${node.alamat || '<em>Alamat tidak tersedia</em>'}`;
-        el.appendChild(detail);
+        // Tombol info kecil di sebelah kanan nama
+        const infoBtn = document.createElement('button');
+        infoBtn.className = 'company-info-btn';
+        infoBtn.title     = 'Lihat detail perusahaan';
+        infoBtn.innerHTML = '<i class="fas fa-info-circle"></i>';
+        content.appendChild(infoBtn);
 
-        content.addEventListener('click', () => detail.classList.toggle('active'));
+        // Bangun konten tooltip
+        const fields = [
+            { icon: 'fa-id-badge',      label: 'ID STPU',       val: node.idstpu },
+            { icon: 'fa-map-marker-alt',label: 'Alamat',         val: node.alamat },
+            { icon: 'fa-user',           label: 'Korespondensi', val: node.nmkorespondensi },
+            { icon: 'fa-phone',          label: 'No. Kontak',    val: node.nohp },
+            { icon: 'fa-envelope',       label: 'Email',         val: node.email },
+            { icon: 'fa-sitemap',        label: 'Jar. Usaha',    val: node.jarusaha },
+            { icon: 'fa-industry',       label: 'KBLI',          val: node.kbli },
+        ];
+
+        const rows = fields.map(f => {
+            const v = (f.val && String(f.val).trim()) ? String(f.val).trim() : '—';
+            const isEmail = f.label === 'Email' && v !== '—';
+            const isPhone = f.label === 'No. Kontak' && v !== '—';
+            const valHtml = isEmail ? `<a href="mailto:${v}">${v}</a>`
+                          : isPhone ? `<a href="tel:${v}">${v}</a>`
+                          : v;
+            return `<div class="ttp-row">
+                      <span class="ttp-label"><i class="fas ${f.icon}"></i> ${f.label}</span>
+                      <span class="ttp-val">${valHtml}</span>
+                    </div>`;
+        }).join('');
+
+        const tooltip = document.createElement('div');
+        tooltip.className = 'company-tooltip';
+        tooltip.innerHTML = `
+            <div class="ttp-header">
+                <i class="fas fa-building"></i>
+                <span>${node.name}</span>
+                <button class="ttp-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="ttp-body">${rows}</div>`;
+        el.appendChild(tooltip);
+
+        // Toggle tooltip saat klik tombol info atau nama perusahaan
+        const toggleTooltip = (e) => {
+            e.stopPropagation();
+            // Tutup tooltip lain yang terbuka
+            document.querySelectorAll('.company-tooltip.open').forEach(t => {
+                if (t !== tooltip) t.classList.remove('open');
+            });
+            tooltip.classList.toggle('open');
+        };
+
+        infoBtn.addEventListener('click', toggleTooltip);
+        // Klik di luar tooltip → tutup
+        tooltip.querySelector('.ttp-close').addEventListener('click', (e) => {
+            e.stopPropagation();
+            tooltip.classList.remove('open');
+        });
     }
 
     // Children
@@ -172,15 +225,17 @@ function createNodeElement(node) {
         });
     }
 
-    // Drag & drop
-    if (isCompany) {
+    // Drag & drop — hanya untuk admin
+    if (isCompany && isAdmin) {
         content.draggable = true;
         content.addEventListener('dragstart', handleDragStart);
         content.addEventListener('dragend',   handleDragEnd);
     }
-    content.addEventListener('dragover',  handleDragOver);
-    content.addEventListener('dragleave', handleDragLeave);
-    content.addEventListener('drop',      handleDrop);
+    if (isAdmin) {
+        content.addEventListener('dragover',  handleDragOver);
+        content.addEventListener('dragleave', handleDragLeave);
+        content.addEventListener('drop',      handleDrop);
+    }
 
     return el;
 }
@@ -374,6 +429,58 @@ async function loadSummary() {
 }
 
 loadSummary();
+checkAuthStatus();
+handleAuthRedirect();
+
+// ─── Auth Status ──────────────────────────────────────────────────────────────
+
+async function checkAuthStatus() {
+    try {
+        const res    = await fetch('api.php?action=get_auth_status');
+        const result = await res.json();
+        if (result.status === 'success') {
+            isAdmin = result.is_admin;
+            if (isAdmin) {
+                document.querySelectorAll('.admin-only').forEach(el => el.style.display = '');
+                const bar  = document.getElementById('admin-bar');
+                const nama = document.getElementById('admin-nama');
+                if (bar)  bar.style.display  = 'flex';
+                if (nama) nama.textContent    = result.nama || result.username || 'Admin';
+                // Nascondi il tasto di login se già autenticato
+                const ssoBtn = document.getElementById('btn-sso-login');
+                if (ssoBtn) ssoBtn.style.display = 'none';
+            }
+        }
+    } catch (e) {
+        console.warn('Auth status check failed:', e);
+    }
+}
+
+// Tampilkan toast berdasarkan parameter ?auth= dari redirect auth.php
+function handleAuthRedirect() {
+    const params = new URLSearchParams(window.location.search);
+    const auth   = params.get('auth');
+    const msg    = params.get('msg');
+    if (!auth) return;
+
+    // Hapus query string dari URL tanpa reload
+    window.history.replaceState({}, '', window.location.pathname);
+
+    if (auth === 'ok') {
+        showToast('✓ Login berhasil! Selamat datang, Admin.');
+    } else if (auth === 'notadmin') {
+        showToast(msg || 'Akun Anda tidak memiliki hak akses admin.', true);
+    } else if (auth === 'error') {
+        showToast('Login gagal: ' + (msg || 'Terjadi kesalahan SSO.'), true);
+    }
+}
+
+// Tutup semua tooltip saat klik di luar elemen perusahaan
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('.tree-node')) {
+        document.querySelectorAll('.company-tooltip.open').forEach(t => t.classList.remove('open'));
+    }
+});
 
 // ─── Modal Tambah Data ────────────────────────────────────────────────────────
 
@@ -484,7 +591,19 @@ async function submitForm(e) {
     const nmprsh   = document.getElementById('input-prsh').value;
     const alamat   = document.getElementById('input-alamat').value;
 
-    const payload = { action: 'add_company', jnskw, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat };
+    // Field baru
+    const idstpu          = document.getElementById('input-idstpu').value;
+    const nmkorespondensi = document.getElementById('input-nmkoresp').value;
+    const nohp            = document.getElementById('input-nohp').value;
+    const email           = document.getElementById('input-email').value;
+    const jarusaha        = document.getElementById('input-jarusaha').value;
+    const kbli            = document.getElementById('input-kbli').value;
+
+    const payload = {
+        action: 'add_company',
+        jnskw, kdprov, nmprov, kdkab, nmkab, kdprovkab, nmkw, nmprsh, alamat,
+        idstpu, nmkorespondensi, nohp, email, jarusaha, kbli
+    };
 
     try {
         const btnSave = document.getElementById('btn-save-data');

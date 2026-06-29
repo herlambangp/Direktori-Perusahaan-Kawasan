@@ -1,5 +1,5 @@
 <?php
-// setup_db.php — Import dari master-sampel-stpu-tw2.csv
+// setup_db.php — Import dari master-sampel-stpu-tw2-290626.csv
 
 require_once __DIR__ . '/config.php';
 $conn = db_connect_no_db();
@@ -18,19 +18,26 @@ $conn->select_db(DB_NAME);
 $conn->query("DROP TABLE IF EXISTS perusahaan");
 
 $sql = "CREATE TABLE perusahaan (
-    id          INT(11) AUTO_INCREMENT PRIMARY KEY,
-    kdprov      VARCHAR(10),
-    nmprov      VARCHAR(100),
-    kdkab       VARCHAR(10),
-    nmkab       VARCHAR(100),
-    kdprovkab   VARCHAR(10),
-    jnskw       VARCHAR(10),
-    nmkw        VARCHAR(255),
-    nmprsh      VARCHAR(255),
-    alamat      TEXT,
+    id              INT(11) AUTO_INCREMENT PRIMARY KEY,
+    kdprov          VARCHAR(10),
+    nmprov          VARCHAR(100),
+    kdkab           VARCHAR(10),
+    nmkab           VARCHAR(100),
+    kdprovkab       VARCHAR(10),
+    jnskw           VARCHAR(10),
+    nmkw            VARCHAR(255),
+    nmprsh          VARCHAR(255),
+    alamat          TEXT,
+    idstpu          VARCHAR(50),
+    nmkorespondensi VARCHAR(255),
+    nohp            VARCHAR(50),
+    email           VARCHAR(255),
+    jarusaha        VARCHAR(255),
+    kbli            VARCHAR(255),
     INDEX idx_kawasan (jnskw, kdprovkab),
     INDEX idx_prov    (kdprov),
-    INDEX idx_kab     (kdprovkab)
+    INDEX idx_kab     (kdprovkab),
+    INDEX idx_idstpu  (idstpu)
 )";
 
 if ($conn->query($sql) === TRUE) {
@@ -40,7 +47,7 @@ if ($conn->query($sql) === TRUE) {
 }
 
 // --- Import CSV ---
-$csvFile = 'master-sampel-stpu-tw2.csv';
+$csvFile = 'master-sampel-stpu-tw2-290626.csv';
 if (!file_exists($csvFile)) {
     die("File $csvFile tidak ditemukan.<br>\n");
 }
@@ -99,7 +106,10 @@ if ($bom !== "\xEF\xBB\xBF") {
     rewind($file);
 }
 
-// Baca header
+// Baris pertama = label deskriptif, lewati
+fgetcsv($file, 0, ';');
+
+// Baris kedua = nama kolom teknis
 $header = fgetcsv($file, 0, ';');
 // Normalkan nama kolom (trim + lowercase)
 $header = array_map(fn($h) => strtolower(trim($h)), $header);
@@ -108,8 +118,10 @@ $header = array_map(fn($h) => strtolower(trim($h)), $header);
 $idx = array_flip($header);
 
 $stmt = $conn->prepare(
-    "INSERT INTO perusahaan (kdprov, nmprov, kdkab, nmkab, kdprovkab, jnskw, nmkw, nmprsh, alamat)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    "INSERT INTO perusahaan
+        (kdprov, nmprov, kdkab, nmkab, kdprovkab, jnskw, nmkw, nmprsh, alamat,
+         idstpu, nmkorespondensi, nohp, email, jarusaha, kbli)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
 
 $count   = 0;
@@ -118,21 +130,36 @@ $skipped = 0;
 while (($data = fgetcsv($file, 0, ';')) !== FALSE) {
     if (count($data) < 5) { $skipped++; continue; }
 
-    $kdprov       = trim($data[$idx['kdprov']] ?? '');
-    $kdkab        = trim($data[$idx['kdkab']] ?? '');
-    $nmprsh       = trim($data[$idx['nama_perusahaan']] ?? '');
-    $alamat       = trim($data[$idx['alamat']] ?? '');
-    $kdprovkab    = trim($data[$idx['kdprovkab']] ?? '');
-    $lblkab       = trim($data[$idx['lblkab']] ?? '');
-    $kawasan_raw  = trim($data[$idx['kawasan']] ?? '');
-    $nama_kawasan = trim($data[$idx['nama_kawasan']] ?? '');
+    $kdprov          = trim($data[$idx['prov']]               ?? '');
+    $kdkab           = trim($data[$idx['kab']]                ?? '');
+    $nmprsh          = trim($data[$idx['b1r101']]             ?? '');
+    $alamat          = trim($data[$idx['b1r102']]             ?? '');
+    $kdprovkab       = trim($data[$idx['b1r103_value']]       ?? '');
+    $lblkab          = trim($data[$idx['b1r103_label']]       ?? '');
+    $kawasan_raw     = trim($data[$idx['b1r108_label']]       ?? '');
+    $nama_kawasan    = trim($data[$idx['b1r109_label']]       ?? '');
+    // Fallback: jika b1r108_label kosong, pakai kolom jenis_kawasan
+    if ($kawasan_raw === '') {
+        $kawasan_raw = trim($data[$idx['jenis_kawasan']] ?? '');
+    }
+    // Fallback nama kawasan: jika b1r109_label kosong, pakai b1r109_value
+    if ($nama_kawasan === '' && isset($idx['b1r109_value'])) {
+        $nama_kawasan = trim($data[$idx['b1r109_value']] ?? '');
+    }
+    $idstpu          = trim($data[$idx['idstpu']]             ?? '');
+    $nmkorespondensi = trim($data[$idx['b1r105']]             ?? '');
+    $nohp            = trim($data[$idx['b1r104']]             ?? '');
+    $email           = trim($data[$idx['b1r106']]             ?? '');
+    $jarusaha        = trim($data[$idx['b2r202_label']]       ?? '');
+    $kbli            = trim($data[$idx['b2r204_kbli_label']]  ?? '');
 
     if ($nmprsh === '') { $skipped++; continue; }
 
-    // Mapping jnskw
-    if ($kawasan_raw === 'Kawasan Industri') {
+    // Mapping jnskw — terima berbagai variasi teks
+    $kawasan_lower = strtolower($kawasan_raw);
+    if (str_contains($kawasan_lower, 'industri')) {
         $jnskw = 'KI';
-    } elseif ($kawasan_raw === 'Kawasan Ekonomi Khusus') {
+    } elseif (str_contains($kawasan_lower, 'ekonomi khusus') || str_contains($kawasan_lower, 'kek')) {
         $jnskw = 'KEK';
     } else {
         $jnskw = strtoupper(substr($kawasan_raw, 0, 10));
@@ -144,7 +171,6 @@ while (($data = fgetcsv($file, 0, ';')) !== FALSE) {
     // Nama kab dari lblkab: "[08] ACEH BESAR" → "ACEH BESAR"
     $nmkab = '';
     if ($lblkab !== '') {
-        // ambil setelah "] "
         $pos = strpos($lblkab, '] ');
         $nmkab = ($pos !== FALSE) ? substr($lblkab, $pos + 2) : $lblkab;
         $nmkab = strtoupper(trim($nmkab));
@@ -160,15 +186,16 @@ while (($data = fgetcsv($file, 0, ';')) !== FALSE) {
     $nmkw = ($nama_kawasan !== '') ? $nama_kawasan : 'Lainnya';
 
     $stmt->bind_param(
-        "sssssssss",
+        "sssssssssssssss",
         $kdprov, $nmprov, $kdkab, $nmkab, $kdprovkab,
-        $jnskw, $nmkw, $nmprsh, $alamat
+        $jnskw, $nmkw, $nmprsh, $alamat,
+        $idstpu, $nmkorespondensi, $nohp, $email, $jarusaha, $kbli
     );
 
     if ($stmt->execute()) {
         $count++;
     } else {
-        echo "Warning baris " . ($count + $skipped + 2) . ": " . $stmt->error . "<br>\n";
+        echo "Warning baris " . ($count + $skipped + 3) . ": " . $stmt->error . "<br>\n";
         $skipped++;
     }
 }

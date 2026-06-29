@@ -35,6 +35,19 @@
             <h1>Direktori Perusahaan</h1>
             <p>Kawasan Ekonomi Khusus dan Kawasan Industri</p>
         </div>
+        <!-- Login Pengelola (tampil jika belum login) -->
+        <a href="auth.php" class="btn-sso-header" id="btn-sso-login" rel="noopener noreferrer" title="Login sebagai pengelola web">
+            <i class="fas fa-sign-in-alt"></i>
+            <span>Login Pengelola</span>
+        </a>
+        <!-- Admin bar — tampil setelah login sebagai admin -->
+        <div class="admin-bar" id="admin-bar">
+            <i class="fas fa-user-shield"></i>
+            <span id="admin-nama">Admin</span>
+            <a href="logout.php" class="btn-logout" id="btn-logout" title="Keluar dari sesi admin">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </a>
+        </div>
     </header>
 
     <main class="app-container">
@@ -79,7 +92,7 @@
                     </button>
                     <h2 class="section-title" id="dir-title" style="margin-bottom:0;">Direktori</h2>
                 </div>
-                <button class="btn-primary" onclick="openAddModal()" id="btn-add-data">
+                <button class="btn-primary admin-only" onclick="openAddModal()" id="btn-add-data" style="display:none">
                     <i class="fas fa-plus"></i> Tambah Data
                 </button>
             </div>
@@ -166,44 +179,88 @@
             </div>
             <div class="modal-body">
                 <form id="addForm" onsubmit="submitForm(event)">
-                    <div class="form-group">
-                        <label for="input-jnskw">Jenis Kawasan</label>
-                        <select id="input-jnskw" required onchange="loadProvOptions()">
-                            <option value="">-- Pilih Jenis --</option>
-                            <option value="KEK">Kawasan Ekonomi Khusus (KEK)</option>
-                            <option value="KI">Kawasan Industri (KI)</option>
-                        </select>
+
+                    <!-- ── Seksi: Lokasi Kawasan ── -->
+                    <div class="form-section-label">Lokasi Kawasan</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-jnskw">Jenis Kawasan</label>
+                            <select id="input-jnskw" required onchange="loadProvOptions()">
+                                <option value="">-- Pilih Jenis --</option>
+                                <option value="KEK">Kawasan Ekonomi Khusus (KEK)</option>
+                                <option value="KI">Kawasan Industri (KI)</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-prov">Provinsi</label>
+                            <select id="input-prov" required onchange="loadKabOptions()" disabled>
+                                <option value="">-- Pilih Provinsi --</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="form-group">
-                        <label for="input-prov">Provinsi</label>
-                        <select id="input-prov" required onchange="loadKabOptions()" disabled>
-                            <option value="">-- Pilih Provinsi --</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="input-kab">Kabupaten/Kota</label>
-                        <select id="input-kab" required onchange="loadKwOptions()" disabled>
-                            <option value="">-- Pilih Kabupaten --</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label for="input-kw">Nama Kawasan</label>
-                        <select id="input-kw" required onchange="toggleNewKw()" disabled>
-                            <option value="">-- Pilih Kawasan --</option>
-                        </select>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-kab">Kabupaten/Kota</label>
+                            <select id="input-kab" required onchange="loadKwOptions()" disabled>
+                                <option value="">-- Pilih Kabupaten --</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-kw">Nama Kawasan</label>
+                            <select id="input-kw" required onchange="toggleNewKw()" disabled>
+                                <option value="">-- Pilih Kawasan --</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group hidden" id="group-new-kw">
                         <label for="input-new-kw">Nama Kawasan Baru</label>
                         <input type="text" id="input-new-kw" placeholder="Ketik nama kawasan...">
                     </div>
-                    <div class="form-group">
-                        <label for="input-prsh">Nama Perusahaan</label>
-                        <input type="text" id="input-prsh" required placeholder="Nama PT / CV...">
+
+                    <!-- ── Seksi: Identitas Perusahaan ── -->
+                    <div class="form-section-label">Identitas Perusahaan</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-idstpu">ID STPU</label>
+                            <input type="text" id="input-idstpu" placeholder="Kode ID STPU...">
+                        </div>
+                        <div class="form-group">
+                            <label for="input-prsh">Nama Perusahaan</label>
+                            <input type="text" id="input-prsh" required placeholder="Nama PT / CV...">
+                        </div>
                     </div>
                     <div class="form-group">
                         <label for="input-alamat">Alamat Perusahaan</label>
                         <textarea id="input-alamat" rows="2" placeholder="Alamat lengkap..."></textarea>
                     </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-jarusaha">Jaringan Usaha</label>
+                            <input type="text" id="input-jarusaha" placeholder="Contoh: Tunggal, Grup...">
+                        </div>
+                        <div class="form-group">
+                            <label for="input-kbli">KBLI</label>
+                            <input type="text" id="input-kbli" placeholder="Label KBLI...">
+                        </div>
+                    </div>
+
+                    <!-- ── Seksi: Korespondensi ── -->
+                    <div class="form-section-label">Kontak Korespondensi</div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="input-nmkoresp">Nama Korespondensi</label>
+                            <input type="text" id="input-nmkoresp" placeholder="Nama penghubung...">
+                        </div>
+                        <div class="form-group">
+                            <label for="input-nohp">No. HP</label>
+                            <input type="tel" id="input-nohp" placeholder="08xx-xxxx-xxxx">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="input-email">Email</label>
+                        <input type="email" id="input-email" placeholder="contoh@email.com">
+                    </div>
+
                     <div class="modal-footer">
                         <button type="button" class="btn-cancel" onclick="closeAddModal()">Batal</button>
                         <button type="submit" class="btn-submit" id="btn-save-data">
