@@ -149,22 +149,19 @@ function createNodeElement(node) {
 
     // ── Company tooltip (muncul saat klik nama perusahaan) ───────────────────
     if (isCompany) {
-        // Tombol info kecil di sebelah kanan nama
-        const infoBtn = document.createElement('button');
-        infoBtn.className = 'company-info-btn';
-        infoBtn.title     = 'Lihat detail perusahaan';
-        infoBtn.innerHTML = '<i class="fas fa-info-circle"></i>';
-        content.appendChild(infoBtn);
+        // Beri style kursor pointer agar terlihat bisa diklik
+        content.style.cursor = 'pointer';
+        content.title        = 'Klik untuk lihat detail perusahaan';
 
         // Bangun konten tooltip
         const fields = [
-            { icon: 'fa-id-badge',      label: 'ID STPU',       val: node.idstpu },
-            { icon: 'fa-map-marker-alt',label: 'Alamat',         val: node.alamat },
-            { icon: 'fa-user',           label: 'Korespondensi', val: node.nmkorespondensi },
-            { icon: 'fa-phone',          label: 'No. Kontak',    val: node.nohp },
-            { icon: 'fa-envelope',       label: 'Email',         val: node.email },
-            { icon: 'fa-sitemap',        label: 'Jar. Usaha',    val: node.jarusaha },
-            { icon: 'fa-industry',       label: 'KBLI',          val: node.kbli },
+            { icon: 'fa-id-badge',       label: 'ID STPU',       val: node.idstpu },
+            { icon: 'fa-map-marker-alt', label: 'Alamat',         val: node.alamat },
+            { icon: 'fa-user',           label: 'Korespondensi',  val: node.nmkorespondensi },
+            { icon: 'fa-phone',          label: 'No. Kontak',     val: node.nohp },
+            { icon: 'fa-envelope',       label: 'Email',          val: node.email },
+            { icon: 'fa-sitemap',        label: 'Jar. Usaha',     val: node.jarusaha },
+            { icon: 'fa-industry',       label: 'KBLI',           val: node.kbli },
         ];
 
         const rows = fields.map(f => {
@@ -191,18 +188,18 @@ function createNodeElement(node) {
             <div class="ttp-body">${rows}</div>`;
         el.appendChild(tooltip);
 
-        // Toggle tooltip saat klik tombol info atau nama perusahaan
+        // Toggle tooltip saat klik seluruh area nama perusahaan
         const toggleTooltip = (e) => {
             e.stopPropagation();
-            // Tutup tooltip lain yang terbuka
             document.querySelectorAll('.company-tooltip.open').forEach(t => {
                 if (t !== tooltip) t.classList.remove('open');
             });
             tooltip.classList.toggle('open');
         };
 
-        infoBtn.addEventListener('click', toggleTooltip);
-        // Klik di luar tooltip → tutup
+        content.addEventListener('click', toggleTooltip);
+
+        // Tombol × di dalam tooltip → tutup
         tooltip.querySelector('.ttp-close').addEventListener('click', (e) => {
             e.stopPropagation();
             tooltip.classList.remove('open');
