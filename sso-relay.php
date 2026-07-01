@@ -116,11 +116,24 @@ if (isset($_GET['code'])) {
     $userInfo    = $userInfoRaw ? json_decode($userInfoRaw, true) : [];
 
     // Buat signed payload
+    // NIP di Keycloak BPS bisa ada di field 'nip', 'employeeId', atau 'preferred_username'
+    $nip = trim(
+        $userInfo['nip']            ??
+        $userInfo['employeeId']     ??
+        $userInfo['employee_id']    ??
+        $userInfo['preferred_username'] ?? ''
+    );
+
+    // Log userinfo mentah untuk debugging (hapus di production)
+    $debugLog = date('Y-m-d H:i:s') . ' userinfo=' . json_encode($userInfo, JSON_UNESCAPED_UNICODE) . PHP_EOL;
+    @file_put_contents(__DIR__ . '/sso_relay_debug.log', $debugLog, FILE_APPEND | LOCK_EX);
+
     $payload = [
+        'nip'      => $nip,
         'username' => trim($userInfo['preferred_username'] ?? ''),
         'email'    => trim($userInfo['email']              ?? ''),
         'name'     => trim($userInfo['name'] ?? ($userInfo['given_name'] ?? '')),
-        'ts'       => time(), // timestamp untuk validasi TTL
+        'ts'       => time(),
     ];
 
     $token = make_relay_token($payload);
