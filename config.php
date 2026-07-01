@@ -35,6 +35,13 @@ define('SSO_REALM',  'pegawai-bps');                              // ← Sesuaik
 define('SSO_CLIENT', '02600-lsp-m5s');                // ← Sesuaikan client_id yg didaftarkan
 define('SSO_SECRET', '134d7afa-fe13-4b3f-89e5-b3e8ab632513');    // ← Isi client secret jika confidential client
 
+// --- SSO Relay (via lsp.web.bps.go.id) ---
+// sso-relay.php di lsp bertindak sebagai jembatan Keycloak untuk domain ini.
+// RELAY_SECRET harus sama persis dengan define('RELAY_SECRET', ...) di sso-relay.php
+define('RELAY_URL',    'https://lsp.web.bps.go.id/sso-relay.php');
+define('RELAY_SECRET', 'K8xP#mQ2vL9nR4wT7uY1sZ5jA3bC6dE0'); // ← Jaga kerahasiaan!
+define('TOKEN_TTL',    300); // Token relay berlaku 5 menit
+
 // --- Helper: buat koneksi MySQLi, langsung exit jika gagal ---
 function db_connect(): mysqli {
     $conn = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);

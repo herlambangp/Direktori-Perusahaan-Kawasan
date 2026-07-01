@@ -150,17 +150,9 @@ if (isset($_GET['error'])) {
     exit;
 }
 
-// ── Belum ada code → mulai flow login ke Keycloak ────────────────────────────
-$state = bin2hex(random_bytes(16));
-$_SESSION['oauth_state'] = $state;
-
-$loginUrl = $authEndpoint . '?' . http_build_query([
-    'client_id'     => SSO_CLIENT,
-    'redirect_uri'  => $redirectUri,
-    'response_type' => 'code',
-    'scope'         => 'openid profile email',
-    'state'         => $state,
-]);
-
-header('Location: ' . $loginUrl);
+// ── Belum ada code → mulai flow login via SSO Relay ─────────────────────────
+// Redirect ke sso-relay.php di lsp.web.bps.go.id yang sudah terdaftar di Keycloak.
+// Setelah login berhasil, relay akan mengirim signed token ke auth-relay-callback.php
+$returnUrl = APP_URL . 'auth-relay-callback.php';
+header('Location: ' . RELAY_URL . '?return_url=' . urlencode($returnUrl));
 exit;
