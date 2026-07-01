@@ -19,7 +19,12 @@ session_start();
 define('RELAY_SECRET', 'K8xP#mQ2vL9nR4wT7uY1sZ5jA3bC6dE0');
 
 // Whitelist domain yang boleh menerima relay token (keamanan)
-define('ALLOWED_RETURN_HOSTS', ['dsi.web.bps.go.id']);
+// Production + local development hosts
+define('ALLOWED_RETURN_HOSTS', [
+    'dsi.web.bps.go.id',
+    'localhost',
+    '127.0.0.1',
+]);
 
 // Token berlaku max N detik (anti replay-attack)
 define('TOKEN_TTL', 300); // 5 menit
@@ -130,6 +135,7 @@ if (isset($_GET['code'])) {
 
     $payload = [
         'nip'      => $nip,
+        'niplama'  => trim($userInfo['nip-lama'] ?? ''),  // NIP lama (9 digit) — key di tabel user
         'username' => trim($userInfo['preferred_username'] ?? ''),
         'email'    => trim($userInfo['email']              ?? ''),
         'name'     => trim($userInfo['name'] ?? ($userInfo['given_name'] ?? '')),
@@ -167,9 +173,17 @@ if (empty($returnUrl)) {
     die('Parameter return_url diperlukan.');
 }
 
-$returnHost = parse_url($returnUrl, PHP_URL_HOST);
+$parsedReturn = parse_url($returnUrl);
+$returnHost   = $parsedReturn['host'] ?? '';
+
+// Debug log untuk troubleshooting
+$debugLine = date('Y-m-d H:i:s') . ' [STEP1] return_url=' . $returnUrl . ' host=' . $returnHost . PHP_EOL;
+@file_put_contents(__DIR__ . '/sso_relay_debug.log', $debugLine, FILE_APPEND | LOCK_EX);
+
 if (!in_array($returnHost, ALLOWED_RETURN_HOSTS, true)) {
-    die('Return URL tidak diizinkan: ' . htmlspecialchars($returnHost));
+    $debugLine2 = date('Y-m-d H:i:s') . ' [BLOCKED] host=' . $returnHost . ' not in whitelist' . PHP_EOL;
+    @file_put_contents(__DIR__ . '/sso_relay_debug.log', $debugLine2, FILE_APPEND | LOCK_EX);
+    die('Return URL tidak diizinkan: ' . htmlspecialchars($returnHost) . '. Allowed: ' . implode(', ', ALLOWED_RETURN_HOSTS));
 }
 
 $_SESSION['relay_return'] = $returnUrl;

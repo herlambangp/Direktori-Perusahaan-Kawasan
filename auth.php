@@ -16,6 +16,12 @@ if (!empty($_SESSION['is_admin'])) {
     exit;
 }
 
+// ── Deteksi localhost → langsung OAuth ke Keycloak (tanpa relay, hindari WAF) ─
+$_host    = $_SERVER['HTTP_HOST'] ?? '';
+$_isLocal = in_array($_host, ['localhost', '127.0.0.1', '::1'])
+         || str_starts_with($_host, 'localhost:')
+         || str_starts_with($_host, '127.0.0.1:');
+
 // ── Helper: tulis debug log ───────────────────────────────────────────────────
 function write_debug_log(array $data): void {
     $logFile = __DIR__ . '/auth_debug.log';
@@ -89,54 +95,57 @@ if (isset($_GET['code'])) {
     $ssoUsername  = trim($userInfo['preferred_username'] ?? '');
     $ssoEmail     = trim($userInfo['email']              ?? '');
     $ssoName      = trim($userInfo['name']               ?? ($userInfo['given_name'] ?? ''));
+    $ssoNipLama   = trim($userInfo['nip-lama']           ?? '');
     $emailPrefix  = $ssoEmail ? (strstr($ssoEmail, '@', true) ?: '') : '';
 
     // Pastikan minimal ada satu identifier
-    if (!$ssoUsername && !$ssoEmail) {
+    if (!$ssoNipLama && !$ssoUsername && !$ssoEmail) {
         write_debug_log(['step' => 'identify', 'error' => 'no identifier', 'userinfo' => $userInfo]);
-        header('Location: index.html?auth=error&msg=' . urlencode('Username/email tidak ditemukan dari SSO'));
+        header('Location: index.html?auth=error&msg=' . urlencode('Identitas tidak ditemukan dari SSO'));
         exit;
     }
 
-    // ── 4. Cari user di tabel — cocokkan via username ATAU email ─────────────
-    // Strategi (OR semua kemungkinan):
-    //   a. preferred_username == username di DB
-    //   b. email dari SSO     == email di DB
-    //   c. prefix email (sebelum @) == username di DB
+    // ── 4. Cari user di tabel — cocokkan via niplama dari SSO ───────────────
+    // Tabel user memiliki kolom: niplama, nama, jabatan, admin_dir
+    // SSO BPS mengirim field 'nip-lama' yang dicocokkan ke kolom niplama
     $conn = db_connect();
     $stmt = $conn->prepare(
-        "SELECT username, nama, email FROM user
-         WHERE username = ?
-            OR email    = ?
-            OR username = ?
+        "SELECT niplama, nama, jabatan, admin_dir FROM user
+         WHERE niplama = ?
          LIMIT 1"
     );
-    $stmt->bind_param("sss", $ssoUsername, $ssoEmail, $emailPrefix);
+    $stmt->bind_param("s", $ssoNipLama);
     $stmt->execute();
     $dbUser = $stmt->get_result()->fetch_assoc();
     $conn->close();
 
     write_debug_log([
-        'step'        => 'db_lookup',
-        'ssoUsername' => $ssoUsername,
-        'ssoEmail'    => $ssoEmail,
-        'emailPrefix' => $emailPrefix,
-        'found'       => $dbUser ? $dbUser['username'] : null,
+        'step'      => 'db_lookup',
+        'nipLama'   => $ssoNipLama,
+        'username'  => $ssoUsername,
+        'found'     => $dbUser ? $dbUser['niplama'] : null,
+        'admin_dir' => $dbUser ? $dbUser['admin_dir'] : null,
     ]);
 
-    if ($dbUser) {
-        // ✅ Admin — simpan ke session
+    if ($dbUser && (int)$dbUser['admin_dir'] === 1) {
+        // ✅ Admin terdaftar dengan admin_dir = 1
         $_SESSION['is_admin']  = true;
-        $_SESSION['username']  = $dbUser['username'];
+        $_SESSION['username']  = $ssoUsername ?: $ssoNipLama;
         $_SESSION['nama']      = $dbUser['nama'];
-        $_SESSION['email']     = $dbUser['email'];
+        $_SESSION['niplama']   = $dbUser['niplama'];
         header('Location: index.html?auth=ok');
-    } else {
-        // ⚠️ Login SSO berhasil tapi bukan admin terdaftar
-        $identifier = $ssoUsername ?: $ssoEmail;
+    } elseif ($dbUser && (int)$dbUser['admin_dir'] !== 1) {
+        // ⚠️ Ada di DB tapi bukan admin direktori
         session_destroy();
         header('Location: index.html?auth=notadmin&msg=' . urlencode(
-            "Akun '$identifier' tidak terdaftar sebagai admin. Hubungi pengelola sistem."
+            "Akun '{$dbUser['nama']}' tidak memiliki akses admin direktori."
+        ));
+    } else {
+        // ⚠️ Login SSO berhasil tapi NIP tidak ditemukan di DB
+        $identifier = $ssoNipLama ?: $ssoUsername;
+        session_destroy();
+        header('Location: index.html?auth=notadmin&msg=' . urlencode(
+            "NIP '$identifier' tidak terdaftar sebagai admin. Hubungi pengelola sistem."
         ));
     }
     exit;
@@ -150,9 +159,27 @@ if (isset($_GET['error'])) {
     exit;
 }
 
-// ── Belum ada code → mulai flow login via SSO Relay ─────────────────────────
-// Redirect ke sso-relay.php di lsp.web.bps.go.id yang sudah terdaftar di Keycloak.
-// Setelah login berhasil, relay akan mengirim signed token ke auth-relay-callback.php
-$returnUrl = APP_URL . 'auth-relay-callback.php';
-header('Location: ' . RELAY_URL . '?return_url=' . urlencode($returnUrl));
+// ── Belum ada code → mulai flow login ────────────────────────────────────────
+if ($_isLocal) {
+    // LOCALHOST: langsung OAuth ke Keycloak (tanpa relay, hindari WAF)
+    // Sama seperti flow awal sebelum relay ditambahkan
+    $state = bin2hex(random_bytes(16));
+    $_SESSION['oauth_state'] = $state;
+
+    $loginUrl = $authEndpoint . '?' . http_build_query([
+        'client_id'     => SSO_CLIENT,
+        'redirect_uri'  => $redirectUri,  // http://localhost/dsi/kawasan/auth.php
+        'response_type' => 'code',
+        'scope'         => 'openid profile-pegawai email',
+        'state'         => $state,
+    ]);
+
+    header('Location: ' . $loginUrl);
+} else {
+    // PRODUCTION: Redirect via SSO Relay di lsp.web.bps.go.id
+    // Setelah login berhasil, relay mengirim signed token ke auth-relay-callback.php
+    $returnUrl = APP_URL . 'auth-relay-callback.php';
+    header('Location: ' . RELAY_URL . '?return_url=' . urlencode($returnUrl));
+}
 exit;
+

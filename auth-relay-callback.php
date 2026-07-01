@@ -57,54 +57,64 @@ if ($payload === null) {
 $ssoUsername = $payload['username'] ?? '';
 $ssoEmail    = $payload['email']    ?? '';
 $ssoName     = $payload['name']     ?? '';
-$emailPrefix = $ssoEmail ? (strstr($ssoEmail, '@', true) ?: '') : '';
+$ssoNipLama  = $payload['niplama']  ?? $payload['nip'] ?? '';
+// niplama dari relay (field 'nip-lama' di Keycloak, disimpan sebagai 'niplama' di payload)
 
 write_auth_log([
-    'step'        => 'relay_received',
+    'step'       => 'relay_received',
     'ssoUsername' => $ssoUsername,
-    'ssoEmail'    => $ssoEmail,
+    'nipLama'    => $ssoNipLama,
 ]);
 
-if (!$ssoUsername && !$ssoEmail) {
-    header('Location: index.html?auth=error&msg=' . urlencode('Username/email tidak ditemukan dari SSO'));
+if (!$ssoNipLama && !$ssoUsername) {
+    header('Location: index.html?auth=error&msg=' . urlencode('Identitas tidak ditemukan dari SSO'));
     exit;
 }
 
-// ── Cari user di tabel ────────────────────────────────────────
+// ── Cari user di tabel ──────────────────────────────────────────────────────
+if (!$ssoNipLama) {
+    header('Location: index.html?auth=error&msg=' . urlencode('NIP Lama tidak tersedia dari SSO relay'));
+    exit;
+}
+
 $conn = db_connect();
 $stmt = $conn->prepare(
-    "SELECT username, nama, email FROM user
-     WHERE username = ?
-        OR email    = ?
-        OR username = ?
+    "SELECT niplama, nama, jabatan, admin_dir FROM user
+     WHERE niplama = ?
      LIMIT 1"
 );
-$stmt->bind_param("sss", $ssoUsername, $ssoEmail, $emailPrefix);
+$stmt->bind_param("s", $ssoNipLama);
 $stmt->execute();
 $dbUser = $stmt->get_result()->fetch_assoc();
 $conn->close();
 
 write_auth_log([
-    'step'        => 'db_lookup',
-    'ssoUsername' => $ssoUsername,
-    'ssoEmail'    => $ssoEmail,
-    'emailPrefix' => $emailPrefix,
-    'found'       => $dbUser ? $dbUser['username'] : null,
+    'step'      => 'db_lookup',
+    'nipLama'   => $ssoNipLama,
+    'username'  => $ssoUsername,
+    'found'     => $dbUser ? $dbUser['niplama'] : null,
+    'admin_dir' => $dbUser ? $dbUser['admin_dir'] : null,
 ]);
 
-if ($dbUser) {
-    // ✅ User terdaftar sebagai admin
+if ($dbUser && (int)$dbUser['admin_dir'] === 1) {
+    // ✅ Admin terdaftar dengan admin_dir = 1
     $_SESSION['is_admin']  = true;
-    $_SESSION['username']  = $dbUser['username'];
+    $_SESSION['username']  = $ssoUsername ?: $ssoNipLama;
     $_SESSION['nama']      = $dbUser['nama'];
-    $_SESSION['email']     = $dbUser['email'];
+    $_SESSION['niplama']   = $dbUser['niplama'];
     header('Location: index.html?auth=ok');
-} else {
-    // ⚠️ Login SSO berhasil tapi bukan admin terdaftar
-    $identifier = $ssoUsername ?: $ssoEmail;
+} elseif ($dbUser && (int)$dbUser['admin_dir'] !== 1) {
+    // ⚠️ Ada di DB tapi tidak punya akses admin direktori
     session_destroy();
     header('Location: index.html?auth=notadmin&msg=' . urlencode(
-        "Akun '$identifier' tidak terdaftar sebagai admin. Hubungi pengelola sistem."
+        "Akun '{$dbUser['nama']}' tidak memiliki akses admin direktori."
+    ));
+} else {
+    // ⚠️ Login SSO berhasil tapi NIP tidak ditemukan di DB
+    $identifier = $ssoNipLama ?: $ssoUsername;
+    session_destroy();
+    header('Location: index.html?auth=notadmin&msg=' . urlencode(
+        "NIP '$identifier' tidak terdaftar sebagai admin. Hubungi pengelola sistem."
     ));
 }
 exit;

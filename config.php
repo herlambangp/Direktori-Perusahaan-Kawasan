@@ -8,9 +8,9 @@
 
 // --- Database ---
 define('DB_HOST', 'localhost');      // Server hosting dsi.web.bps.go.id
-define('DB_USER', 'dsiwebbp_admin'); // Username DB hosting
-define('DB_PASS', 'dsi@5300');      // Password DB hosting
-define('DB_NAME', 'dsiwebbp_kawasan'); // Nama DB di hosting
+define('DB_USER', 'root'); // Username DB hosting
+define('DB_PASS', '');      // Password DB hosting
+define('DB_NAME', 'db_kawasan'); // Nama DB di hosting
 
 // --- Auto-detect APP URL (root direktori ini di web) ---
 // Jika di hosting mengalami "Invalid parameter: redirect_uri", HAPUS/COMMENT baris // di bawah
