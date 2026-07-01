@@ -208,7 +208,7 @@ if ($action === 'get_auth_status') {
     // ── Tambahkan node Lainnya di akhir (jika ada) ────────────────────
     if (!empty($lainnya)) {
         $lainnyaChildren = array_values($lainnya);
-        $totalLainnya = array_sum(array_map(fn($k) => count($k['children']), $lainnyaChildren));
+        $totalLainnya = array_sum(array_map(function($k) { return count($k['children']); }, $lainnyaChildren));
         $finalTree[] = [
             "id"       => "LAINNYA",
             "name"     => "LAINNYA",

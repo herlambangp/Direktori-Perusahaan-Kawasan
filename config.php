@@ -7,10 +7,10 @@
 // ============================================================
 
 // --- Database ---
-define('DB_HOST', 'localhost');     // ← Ganti ini saat di hosting (misal: 'mysql.hostinger.com')
-define('DB_USER', 'root');          // ← Ganti ke username DB hosting
-define('DB_PASS', '');              // ← Isi password DB hosting
-define('DB_NAME', 'db_kawasan');    // ← Sesuaikan nama DB di hosting
+define('DB_HOST', 'localhost');      // Server hosting dsi.web.bps.go.id
+define('DB_USER', 'dsiwebbp_admin'); // Username DB hosting
+define('DB_PASS', 'dsi@5300');      // Password DB hosting
+define('DB_NAME', 'dsiwebbp_kawasan'); // Nama DB di hosting
 
 // --- Auto-detect APP URL (root direktori ini di web) ---
 // Jika di hosting mengalami "Invalid parameter: redirect_uri", HAPUS/COMMENT baris // di bawah

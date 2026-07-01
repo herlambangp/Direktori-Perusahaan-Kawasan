@@ -1,18 +1,36 @@
 <?php
 // setup_db.php — Import dari master-sampel-stpu-tw2-290626.csv
+// Kompatibel dengan PHP 7.2+ dan shared hosting
+
+// Tingkatkan batas waktu & memori untuk import data besar
+@ini_set('max_execution_time', 300);
+@ini_set('memory_limit', '256M');
 
 require_once __DIR__ . '/config.php';
-$conn = db_connect_no_db();
 
-// Buat database
+// Coba koneksi tanpa DB dulu (untuk CREATE DATABASE)
+$conn = new mysqli(DB_HOST, DB_USER, DB_PASS);
+if ($conn->connect_error) {
+    die('Koneksi gagal: ' . $conn->connect_error);
+}
+$conn->set_charset('utf8mb4');
+
+// Buat database — skip jika tidak punya privilege (hosting)
 $sql = "CREATE DATABASE IF NOT EXISTS " . DB_NAME . " CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
-if ($conn->query($sql) === TRUE) {
+$result = $conn->query($sql);
+if ($result === TRUE) {
     echo "Database " . DB_NAME . " siap.<br>\n";
 } else {
-    die("Error creating database: " . $conn->error);
+    // Di hosting, database sudah ada — lanjut saja
+    echo "Info: Database sudah ada atau tidak perlu dibuat (privilege terbatas). Melanjutkan...<br>\n";
 }
 
-$conn->select_db(DB_NAME);
+// Sambungkan ke DB yang sudah ada
+if (!$conn->select_db(DB_NAME)) {
+    die("Gagal terhubung ke database '" . DB_NAME . "': " . $conn->error . "<br>\nPastikan database sudah dibuat di cPanel/phpMyAdmin.");
+}
+
+echo "Terhubung ke database: " . DB_NAME . "<br>\n";
 
 // Drop dan buat ulang tabel dengan skema baru
 $conn->query("DROP TABLE IF EXISTS perusahaan");
@@ -47,13 +65,12 @@ if ($conn->query($sql) === TRUE) {
 }
 
 // --- Import CSV ---
-$csvFile = 'master-sampel-stpu-tw2-290626.csv';
+$csvFile = __DIR__ . '/master-sampel-stpu-tw2-290626.csv';
 if (!file_exists($csvFile)) {
-    die("File $csvFile tidak ditemukan.<br>\n");
+    die("File CSV tidak ditemukan di: $csvFile<br>\nPastikan file sudah di-upload ke folder yang sama dengan setup_db.php.");
 }
 
 // Baca master kode provinsi dari tabel referensi yang sudah ada
-// (dipakai untuk melengkapi nmprov dari kdprov)
 $provMap = [
     '11' => 'ACEH',
     '12' => 'SUMATERA UTARA',
@@ -111,8 +128,8 @@ fgetcsv($file, 0, ';');
 
 // Baris kedua = nama kolom teknis
 $header = fgetcsv($file, 0, ';');
-// Normalkan nama kolom (trim + lowercase)
-$header = array_map(fn($h) => strtolower(trim($h)), $header);
+// Normalkan nama kolom (trim + lowercase) — kompatibel PHP 7.2+
+$header = array_map(function($h) { return strtolower(trim($h)); }, $header);
 
 // Mapping index
 $idx = array_flip($header);
@@ -123,6 +140,10 @@ $stmt = $conn->prepare(
          idstpu, nmkorespondensi, nohp, email, jarusaha, kbli)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
 );
+
+if (!$stmt) {
+    die("Gagal menyiapkan statement: " . $conn->error);
+}
 
 $count   = 0;
 $skipped = 0;
@@ -138,6 +159,7 @@ while (($data = fgetcsv($file, 0, ';')) !== FALSE) {
     $lblkab          = trim($data[$idx['b1r103_label']]       ?? '');
     $kawasan_raw     = trim($data[$idx['b1r108_label']]       ?? '');
     $nama_kawasan    = trim($data[$idx['b1r109_label']]       ?? '');
+
     // Fallback: jika b1r108_label kosong, pakai kolom jenis_kawasan
     if ($kawasan_raw === '') {
         $kawasan_raw = trim($data[$idx['jenis_kawasan']] ?? '');
@@ -155,18 +177,18 @@ while (($data = fgetcsv($file, 0, ';')) !== FALSE) {
 
     if ($nmprsh === '') { $skipped++; continue; }
 
-    // Mapping jnskw — terima berbagai variasi teks
+    // Mapping jnskw — kompatibel PHP 7.2+ (tanpa str_contains)
     $kawasan_lower = strtolower($kawasan_raw);
-    if (str_contains($kawasan_lower, 'industri')) {
+    if (strpos($kawasan_lower, 'industri') !== FALSE) {
         $jnskw = 'KI';
-    } elseif (str_contains($kawasan_lower, 'ekonomi khusus') || str_contains($kawasan_lower, 'kek')) {
+    } elseif (strpos($kawasan_lower, 'ekonomi khusus') !== FALSE || strpos($kawasan_lower, 'kek') !== FALSE) {
         $jnskw = 'KEK';
     } else {
         $jnskw = strtoupper(substr($kawasan_raw, 0, 10));
     }
 
     // Nama provinsi dari kode
-    $nmprov = $provMap[$kdprov] ?? '';
+    $nmprov = isset($provMap[$kdprov]) ? $provMap[$kdprov] : '';
 
     // Nama kab dari lblkab: "[08] ACEH BESAR" → "ACEH BESAR"
     $nmkab = '';
